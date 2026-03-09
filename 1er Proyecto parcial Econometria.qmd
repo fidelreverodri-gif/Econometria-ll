@@ -1,0 +1,178 @@
+---
+title: "1er Proyecto Parcial Econometría-II Pronostico de Nivel de Importacion de grano de Maíz en México"
+author: "Fidel Fernando Reveles Rodríguez"
+format: html
+editor: visual
+---
+
+```{r}
+
+library(forecast)
+library(tseries)   
+library(ggplot2)   
+library(zoo) 
+```
+
+```{r}
+head(Datamaiz)
+```
+
+**Serie de Tiempo**
+
+```{r}
+Importacion_ts <- ts(
+  data = Datamaiz$Importacion,
+  frequency = 12,
+  start = c(1993, 1)
+)
+log_Importacion_ts <- log(Importacion_ts)
+x_dummies_log <- seasonaldummy(log_Importacion_ts)
+
+diff_log_Importacion_ts <- diff(log_Importacion_ts)
+x_dummies_diff_log <- seasonaldummy(diff_log_Importacion_ts)
+
+plot(Importacion_ts, main = "Serie de Importación de Maiz en México Mensual")
+plot(log_Importacion_ts, main = "Serie del Log(Importacion de Maíz) Mensual")
+plot(diff_log_Importacion_ts, main = "Serie del Diff(Log(Importación de Maíz)) Mensual")
+```
+
+**Correlograma**
+
+```{r}
+acf(Importacion_ts, type = "correlation", plot = TRUE,
+    main = "ACF - Importación de Maíz")
+```
+
+```{r}
+log_Importacion_ts <- log(Importacion_ts)
+plot(Importacion_ts,     main = "Serie Original de Importación de Maíz")
+plot(log_Importacion_ts, main = "Log de Importación de Maíz")
+
+```
+
+**Tendencia Lineal**
+
+```{r}
+t <- c(1:length(Importacion_ts))
+model_tend <- lm(Importacion_ts ~ t)
+tendencia <- predict(model_tend)
+plot(tendencia, type = "l", main = "Tendencia lineal de Importación de Maíz")
+```
+
+**Tendencia No lineal**
+
+```{r}
+t_2 <- t^2
+model_tend_2 <- lm(Importacion_ts ~ t + t_2)
+plot(predict(model_tend_2),   type = "l", main = "Tendencia no lineal de Importación de Maíz")
+plot(residuals(model_tend_2), type = "l")
+```
+
+**Promedios Móviles**
+
+```{r}
+n <- length(Importacion_ts)
+q <- round(1 + log(n, base = 2))
+ma_sturges <- rollmean(Importacion_ts, k = q, align = "center", fill = NA)
+plot(Importacion_ts, main = "Serie original de Importación de Maíz")
+lines(ma_sturges)
+```
+
+**Orden AR**
+
+```{r}
+best_aic <- Inf
+best_p   <- NaN
+
+for (p_i in 1:7){
+  model_tmp <- arima(diff_log_Importacion_ts,
+                     order = c(p_i, 0, 0),
+                     xreg  = x_dummies_diff_log)
+  if (model_tmp$aic < best_aic){
+    best_aic <- model_tmp$aic
+    best_p   <- p_i
+  }
+}
+print("El mejor modelo AR es de orden:"); print(best_p)
+print("Con un valor de AIC:");            print(best_aic)
+```
+
+**Orden MA**
+
+```{r}
+valores_de_aic <- numeric(7)
+best_q <- NaN
+
+for (q_i in 1:7){
+  model_tmp <- arima(diff_log_Importacion_ts,
+                     order = c(best_p, 0, q_i),
+                     xreg  = x_dummies_diff_log)
+  valores_de_aic[q_i] <- model_tmp$aic
+  if (model_tmp$aic < best_aic){
+    best_aic <- model_tmp$aic
+    best_q   <- q_i
+  }
+}
+plot(valores_de_aic, type = "l", main = "Historial del AIC con diferentes órdenes MA(q)")
+print("El mejor modelo ARIMA es de orden MA:"); print(best_q)
+print("Con un valor de AIC:");                  print(best_aic)
+```
+
+**Modelo Final**
+
+```{r}
+model_final <- arima(diff_log_Importacion_ts,
+                     order = c(best_p, 0, best_q),
+                     xreg  = x_dummies_diff_log)
+summary(model_final)
+
+```
+
+```{r}
+u_t <- residuals(model_final)
+plot(u_t, main = "Residuales del modelo ARIMA")
+acf(u_t,  main = "ACF de los residuales")
+
+```
+
+**Pronósticos**
+
+```{r}
+future_ts <- ts(rep(NA, 12), frequency = 12, start = c(2026, 1))
+X_future_dummies <- seasonaldummy(future_ts)
+colnames(X_future_dummies) <- colnames(x_dummies_diff_log)
+
+fit <- Arima(diff_log_Importacion_ts,
+             order = c(best_p, 0, best_q),
+             xreg  = x_dummies_diff_log)
+
+fc <- forecast(fit, h = 12, xreg = X_future_dummies)
+importaciones  <- numeric(12)
+lowers_        <- numeric(12)
+uppers_        <- numeric(12)
+end_importacion <- tail(log_Importacion_ts, 1)
+
+for (i in 1:12){
+  log_forecast <- end_importacion + fc$mean[i]
+  log_lower    <- log_forecast + (fc$lower[i] - fc$mean[i])
+  log_upper    <- log_forecast + (fc$upper[i] - fc$mean[i])
+
+  importaciones[i] <- exp(log_forecast)
+  lowers_[i]       <- exp(log_lower)
+  uppers_[i]       <- exp(log_upper)
+
+  end_importacion  <- log_forecast
+}
+
+importaciones; lowers_; uppers_
+
+plot(importaciones, type = "l",
+     ylim = range(c(lowers_, uppers_)),
+     ylab = "Miles de Millones de Dolares", xlab = "Tiempo (meses)",
+     main = "Pronóstico Importación de Maíz 2026")
+
+polygon(c(1:12, rev(1:12)), c(lowers_, rev(uppers_)),
+        col = rgb(0, 0, 0, 0.2), border = NA)
+
+lines(importaciones, lwd = 2)
+```
