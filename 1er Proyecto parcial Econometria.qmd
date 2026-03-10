@@ -168,7 +168,7 @@ importaciones; lowers_; uppers_
 
 plot(importaciones, type = "l",
      ylim = range(c(lowers_, uppers_)),
-     ylab = "Miles de Millones de Dolares", xlab = "Tiempo (meses)",
+     ylab = "Miles de Dolares", xlab = "Tiempo (meses)",
      main = "Pronóstico Importación de Maíz 2026")
 
 polygon(c(1:12, rev(1:12)), c(lowers_, rev(uppers_)),
@@ -176,3 +176,4 @@ polygon(c(1:12, rev(1:12)), c(lowers_, rev(uppers_)),
 
 lines(importaciones, lwd = 2)
 ```
+
